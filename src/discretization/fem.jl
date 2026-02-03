@@ -203,7 +203,7 @@ function semidiscretize(
     single_prob = OrdinaryDiffEqCore.ODEProblem(
         (du,u,m,t) -> Thunderbolt.cell_rhs!(du, u, m.stim_offset, t, m),
         Thunderbolt.default_initial_state(epmodel.ion),
-        (0.0, 50.0),
+        (0.0, 500.0),
         Thunderbolt.StimulatedCellModel(;cell_model = epmodel.ion),
     )
 
