@@ -55,7 +55,10 @@ struct NodalIntergridInterpolation{
     field_name_from::Symbol
     field_name_to::Symbol
 
-    function NodalIntergridInterpolation(
+    
+end
+
+function NodalIntergridInterpolation(
         dh_from::DofHandler{sdim},
         dh_to::DofHandler{sdim},
         field_name_from::Symbol,
@@ -119,7 +122,7 @@ struct NodalIntergridInterpolation{
         n_missing == 0 ||
             @warn "Constructing the interpolation for $field_name_from to $field_name_to failed. $n_missing (out of $(length(ph.cells))) points not found."
 
-        new{typeof(ph), typeof(dh_from), typeof(dh_to)}(
+        NodalIntergridInterpolation{typeof(ph), typeof(dh_from), typeof(dh_to)}(
             ph,
             dh_from,
             dh_to,
@@ -129,7 +132,6 @@ struct NodalIntergridInterpolation{
             field_name_to,
         )
     end
-end
 
 function NodalIntergridInterpolation(
     dh_from::DofHandler{sdim},
