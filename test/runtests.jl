@@ -61,10 +61,13 @@ include("test_transfer.jl")
 
 # include("test_io.jl")
 
-# include("integration/test_solid_mechanics.jl")
-# include("integration/test_electrophysiology.jl")
-# include("integration/test_ecg.jl")
-# include("integration/test_fsi.jl")
+include("integration/test_solid_mechanics.jl")
+include("integration/test_electrophysiology.jl")
+include("integration/test_ecg.jl")
+include("integration/test_fsi.jl")
+
+include("test_eikonal.jl")
+include("integration/test_eikonal.jl")
 
 # include("test_aqua.jl")
 
