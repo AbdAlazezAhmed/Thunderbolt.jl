@@ -519,7 +519,7 @@ function _RadialBasisFunctionTransferOperator(
 
     dofset_from = Set{Int}()
     dofset_to = Set{Int}()
-    @time "push_from" for sdh in dh_to.subdofhandlers[subdomains_to]
+    for sdh in dh_to.subdofhandlers[subdomains_to]
         # Skip subdofhandler if field is not present
         field_name_to ∈ Ferrite.getfieldnames(sdh) || continue
         # Just gather the dofs of the given field in the set
@@ -530,7 +530,7 @@ function _RadialBasisFunctionTransferOperator(
             end
         end
     end
-    @time "push_to" for sdh in dh_from.subdofhandlers[subdomains_from]
+    for sdh in dh_from.subdofhandlers[subdomains_from]
         # Skip subdofhandler if field is not present
         field_name_from ∈ Ferrite.getfieldnames(sdh) || continue
         # Just gather the dofs of the given field in the set
@@ -548,13 +548,13 @@ function _RadialBasisFunctionTransferOperator(
     dof_to_node_map_to = Dict{Int, Int}()
     dof_to_node_map_from = Dict{Int, Int}()
     next_dof_index = 1
-    @time "dh_to" for dof ∈ node_to_dof_map_to
+    for dof ∈ node_to_dof_map_to
         dof_to_node_map_to[dof] = next_dof_index
         next_dof_index += 1
     end
 
     next_dof_index = 1
-    @time "dh_from" for dof ∈ node_to_dof_map_from
+    for dof ∈ node_to_dof_map_from
         dof_to_node_map_from[dof] = next_dof_index
         next_dof_index += 1
     end
@@ -564,7 +564,7 @@ function _RadialBasisFunctionTransferOperator(
     grid_from = Ferrite.get_grid(dh_from)
     nodes_from = Vector{Ferrite.get_coordinate_type(grid_from)}(undef, length(dofset_from))
     nodes_to = Vector{Ferrite.get_coordinate_type(grid_to)}(undef, length(dofset_to))
-    @time "dh_from" for sdh in dh_from.subdofhandlers[subdomains_from]
+    for sdh in dh_from.subdofhandlers[subdomains_from]
         # Skip subdofhandler if field is not present
         field_name_from ∈ Ferrite.getfieldnames(sdh) || continue
         # Grab the reference coordinates of the field to interpolate
@@ -585,7 +585,7 @@ function _RadialBasisFunctionTransferOperator(
             nothing,
         )
     end
-    @time "dh_to" for sdh in dh_to.subdofhandlers[subdomains_to]
+    for sdh in dh_to.subdofhandlers[subdomains_to]
         # Skip subdofhandler if field is not present
         field_name_to ∈ Ferrite.getfieldnames(sdh) || continue
         # Grab the reference coordinates of the field to interpolate
@@ -607,15 +607,15 @@ function _RadialBasisFunctionTransferOperator(
     end
     γf = zeros(length(node_to_dof_map_from))
     γg = zeros(length(node_to_dof_map_from))
-    @info "Pre KDTree constrction"
-    @time "KDTree constrction" source_kdtree = KDTree(nodes_from)
+
+    source_kdtree = KDTree(nodes_from)
     M = 5
     α = 2
-    @time "KNN" support_radii = maximum.(last(knn(source_kdtree, nodes_from, M)))
+    support_radii = maximum.(last(knn(source_kdtree, nodes_from, M)))
     distance_func = (x, xi, y, yi) -> norm(x[xi] - y[yi])
-    @time "source matrix" source_influence_matrix =
+    source_influence_matrix =
         build_sparse_matrix_kdtree(nodes_from, rbf_value, source_kdtree, support_radii, distance_func, α)
-    @time "target matrix" destination_influence_matrix =
+    destination_influence_matrix =
         construct_RBF_dist_kdtree(nodes_from, support_radii, nodes_to, rbf_value, distance_func, α)
     prob = LinearSolve.LinearProblem(source_influence_matrix, copy(γf))
     linsolve = LinearSolve.init(prob, LinearSolve.PardisoJL())
