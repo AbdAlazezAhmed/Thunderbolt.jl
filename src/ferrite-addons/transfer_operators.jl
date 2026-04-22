@@ -26,7 +26,7 @@ function _compute_dof_nodes_barrier!(
     dof_to_node_map,
     ref_coords,
 )
-    _compute_dof_nodes_barrier!(nodes, sdh, dofrange, gip, dof_to_node_map, ref_coords, adj)
+    _compute_dof_nodes_barrier!(nodes, sdh, dofrange, gip, dof_to_node_map, ref_coords, nothing)
 end
 
 function _compute_dof_nodes_barrier!(
@@ -253,7 +253,7 @@ function construct_RBF_dist_kdtree(
     end
 
     # Build CSC matrix of size N_dst × N_src
-    A = sparse(rows, cols, vals)
+    A = sparse(rows, cols, vals, length(coords_dist), length(coords_src))
     return A
 end
 """
@@ -304,6 +304,8 @@ function RadialBasisFunctionTransferOperator(
     subdomains_to = 1:length(dh_to.subdofhandlers),
     rescale = Val(true),
     geodesic = Val(false),
+    M = 5,
+    α = 2
 )
     _RadialBasisFunctionTransferOperator(
         dh_from,
@@ -314,6 +316,8 @@ function RadialBasisFunctionTransferOperator(
         geodesic;
         subdomains_from,
         subdomains_to,
+        M,
+        α
     )
 
 end
@@ -325,6 +329,8 @@ function _RadialBasisFunctionTransferOperator(
     field_name_to::Symbol,
     rescale,
     geodesic::Val{true};
+    M = 5,
+    α = 2,
     subdomains_from = 1:length(dh_from.subdofhandlers),
     subdomains_to = 1:length(dh_to.subdofhandlers),
 ) where {sdim}
@@ -498,6 +504,8 @@ function _RadialBasisFunctionTransferOperator(
     field_name_to::Symbol,
     rescale,
     geodesic::Val{false};
+    M = 5,
+    α = 2,
     subdomains_from = 1:length(dh_from.subdofhandlers),
     subdomains_to = 1:length(dh_to.subdofhandlers),
 ) where {sdim}
@@ -596,8 +604,7 @@ function _RadialBasisFunctionTransferOperator(
     γg = zeros(length(node_to_dof_map_from))
 
     source_kdtree = KDTree(nodes_from)
-    M = 5
-    α = 2
+
     support_radii = maximum.(last(knn(source_kdtree, nodes_from, M)))
     distance_func = (x, xi, y, yi) -> norm(x[xi] - y[yi])
     source_influence_matrix = build_sparse_matrix_kdtree(
