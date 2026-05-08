@@ -570,6 +570,7 @@ function Geselowitz1989ECGLeadCache(
 
     leadprob = LinearSolve.LinearProblem(lead_op.A, copy(lead_rhs[1, :]))
     lincache = init(leadprob, linear_solver)
+    apply!(lincache.A, lead_fun.ch)
     @views for (i, electrode_set) in enumerate(electrode_positions)
         @assert length(electrode_set) ≥ 2 "Electrode set $i has too few electrodes ($(length(electrode_set))<2)"
         current_rhs = lead_rhs[i, :]
@@ -584,7 +585,14 @@ function Geselowitz1989ECGLeadCache(
             )
         end
         lincache.b .= current_rhs
-        LinearSolve.solve!(lincache)
+        apply!(lincache.b, lead_fun.ch)
+        sol = LinearSolve.solve!(lincache)
+        @info current_rhs[findall(!iszero, current_rhs)]
+        if sol.retcode == :Success
+            println("Solver converged!")
+        else
+            println("Solver failed with retcode: ", sol.retcode)
+        end
         Z[i, :] .= lincache.u
     end
 

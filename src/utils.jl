@@ -272,6 +272,15 @@ SparseArrays.getindex(A::ThreadedSparseMatrixCSR, ::Colon, i::Int) = getindex(A.
 
 Ferrite.apply_zero!(A::ThreadedSparseMatrixCSR, f::AbstractVector, ch::ConstraintHandler) =
     apply_zero!(A.A, f, ch)
+
+Ferrite.apply!(A::ThreadedSparseMatrixCSR, f::AbstractVector, ch::ConstraintHandler) =
+    apply!(A.A, f, ch)
+
+
+Ferrite.apply!(A::ThreadedSparseMatrixCSR, ch::ConstraintHandler) =
+    apply!(A.A, ch)
+
+
 function Ferrite.apply_zero!(K::SparseMatrixCSR, f::AbstractVector, ch::ConstraintHandler)
     # m = Ferrite.meandiag(K)
 

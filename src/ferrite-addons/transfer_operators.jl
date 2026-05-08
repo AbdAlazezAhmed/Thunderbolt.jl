@@ -194,15 +194,27 @@ end
 
 @inline function rbf_value(d, r)
     (max((1 - d / r), zero(r))^4) * (1 + 4d / r)
+    # exp(-(d^2)/(r^2))
+    # (max((1 - d / r), zero(r))^6) * (35*(d / r)^2 + 18*(d / r) +3)
+    # (max((1 - d / r), zero(r))^2)
 end
 
 function build_sparse_matrix_kdtree(coords_vec, rbf_func, tree, distances, distance_func, α = 2.0)
     N = length(coords_vec)
 
-    rows = Int[]
-    cols = Int[]
-    vals = Float64[]
+    # First pass: estimate number of nonzeros to pre-size arrays
+    nnz_est = 0
+    for j in 1:N
+        radius = distances[j] * α
+        idxs = inrange(tree, coords_vec[j], radius)
+        nnz_est += length(idxs)
+    end
 
+    rows = zeros(Int, nnz_est)
+    cols = zeros(Int, nnz_est)
+    vals = zeros(Float64, nnz_est)
+    i__ = 1
+    # Second pass: fill arrays
     @views for j = 1:N
         radius = distances[j] * α
         # Query all points within radius around point j (including j itself)
@@ -210,16 +222,18 @@ function build_sparse_matrix_kdtree(coords_vec, rbf_func, tree, distances, dista
         for i in idxs
             d = distance_func(coords_vec, j, coords_vec, i)
             # No need to check d < radius – guaranteed by inrange
-            d =  distance_func(coords_vec, j, coords_vec, i)
             val = rbf_func(d, radius)
-            push!(rows, i)
-            push!(cols, j)
-            push!(vals, val)
+            rows[i__] =  i
+            cols[i__] = j
+            vals[i__] = val
+            i__ += 1
         end
     end
-
+    # resize!(rows, length(rows))
+    # resize!(cols, length(cols))
+    # resize!(vals, length(vals))
     # Build CSC matrix; duplicate entries (if any) will be summed automatically
-    A = sparse(rows, cols, vals)
+    A = SparseArrays.sparse!(rows, cols, vals)
     return A
 end
 
@@ -236,24 +250,37 @@ function construct_RBF_dist_kdtree(
     # Build KD‑tree on destination points (used to query points within radius)
     tree = KDTree(coords_dist)
 
-    rows = Int[]
-    cols = Int[]
-    vals = Float64[]
+    # First pass: estimate number of nonzeros
+    nnz_est = 0
+    for j in 1:N_src
+        radius = distances[j] * α
+        idxs = inrange(tree, coords_src[j], radius)
+        nnz_est += length(idxs)
+    end
 
-    @views for j = 1:N_src
+    rows = zeros(Int, nnz_est)
+    cols = zeros(Int, nnz_est)
+    vals = zeros(Float64, nnz_est)
+    i__ = 1
+    # Second pass: fill arrays
+    @views @inbounds for j = 1:N_src
         radius = distances[j] * α
         idxs = inrange(tree, coords_src[j], radius)
         for i in idxs
             d = distance_func(coords_src, j, coords_dist, i)
             val = rbf_func(d, radius)
-            push!(rows, i)
-            push!(cols, j)
-            push!(vals, val)
+            rows[i__] =  i
+            cols[i__] = j
+            vals[i__] = val
+            i__ += 1
         end
     end
-
+    GC.gc()
+    # resize!(rows, length(rows))
+    # resize!(cols, length(cols))
+    # resize!(vals, length(vals))
     # Build CSC matrix of size N_dst × N_src
-    A = sparse(rows, cols, vals, length(coords_dist), length(coords_src))
+    A = SparseArrays.sparse!(rows, cols, vals, length(coords_dist), length(coords_src))
     return A
 end
 """
@@ -442,7 +469,26 @@ function _RadialBasisFunctionTransferOperator(
     ).dists
     M = 15
     α = 2
-    support_radii = maximum.(last(knn(source_kdtree, nodes_from, M)))
+    # Compute support radii as M-th furthest neighbor distance (by hop count)
+    Nsrc = length(nodes_from)
+    support_radii = zeros(Float64, Nsrc)
+    for src in 1:Nsrc
+        # Get shortest hop-count distances from this source to all nodes
+        hop_dists = Int[]
+        for dst in 1:Nsrc
+            if isfinite(source_sortest_path[dst, src])
+                push!(hop_dists, Int(source_sortest_path[dst, src]))
+            end
+        end
+        # Sort and find M-th furthest (or maximum if fewer than M nodes)
+        sort!(hop_dists)
+        if length(hop_dists) > 0
+            m_idx = min(M, length(hop_dists))
+            support_radii[src] = Float64(hop_dists[m_idx])
+        else
+            support_radii[src] = 1.0  # fallback
+        end
+    end
     h_max = maximum(distances_source)
     β = 2
     distance_func =
@@ -514,6 +560,7 @@ function _RadialBasisFunctionTransferOperator(
 
     dofset_from = Set{Int}()
     dofset_to = Set{Int}()
+    distances_source = allocate_matrix(SparseMatrixCSC{Bool, Int}, dh_from)
     for sdh in dh_to.subdofhandlers[subdomains_to]
         # Skip subdofhandler if field is not present
         field_name_to ∈ Ferrite.getfieldnames(sdh) || continue
@@ -577,7 +624,7 @@ function _RadialBasisFunctionTransferOperator(
             gip,
             dof_to_node_map_from,
             ref_coords,
-            nothing,
+            # distances_source,
         )
     end
     for sdh in dh_to.subdofhandlers[subdomains_to]
@@ -604,10 +651,27 @@ function _RadialBasisFunctionTransferOperator(
     γg = zeros(length(node_to_dof_map_from))
 
     source_kdtree = KDTree(nodes_from)
+    distances_source.nzval .= 1.0
+    # Build graph from adjacency distances (same as geodesic variant)
+    @time "graph const" begin
+        source_graph = SimpleGraph(distances_source[node_to_dof_map_from, node_to_dof_map_from]) 
+    end
+    
+    # Compute shortest hop-count distances for all node pairs
 
-    support_radii = maximum.(last(knn(source_kdtree, nodes_from, M)))
     distance_func = (x, xi, y, yi) -> norm(x[xi] - y[yi])
-    source_influence_matrix = build_sparse_matrix_kdtree(
+
+    # Compute support radii as M-th furthest neighbor distance (by hop count)
+    Nsrc = length(nodes_from)
+    support_radii = zeros(Float64, Nsrc)
+    @info size(distances_source) Nsrc
+    @time  "Graph" for src in 1:Nsrc
+        hop_dists = neighborhood_dists(source_graph, src, M)
+        dist = maximum(x -> distance_func(nodes_from[src], 1, nodes_from[first(x)], 1), hop_dists)
+        support_radii[src] = dist
+    end
+    
+    @time "SPMAT" source_influence_matrix = build_sparse_matrix_kdtree(
         nodes_from,
         rbf_value,
         source_kdtree,
@@ -615,11 +679,10 @@ function _RadialBasisFunctionTransferOperator(
         distance_func,
         α,
     )
-    destination_influence_matrix =
+     @time "SPMAT"  destination_influence_matrix =
         construct_RBF_dist_kdtree(nodes_from, support_radii, nodes_to, rbf_value, distance_func, α)
-    prob = LinearSolve.LinearProblem(source_influence_matrix, copy(γf))
-    linsolve = LinearSolve.init(prob, LinearSolve.PardisoJL())
-
+     @time "Prob"  prob = LinearSolve.LinearProblem(source_influence_matrix, copy(γf))
+    @time "LS" linsolve = LinearSolve.init(prob, LinearSolve.PardisoJL())#, 
     RadialBasisFunctionTransferOperator{
         typeof(rescale),
         typeof(geodesic),
@@ -652,6 +715,8 @@ function RadialBasisFunctionTransferOperator(
     dh_to::DofHandler{sdim};
     rescale = Val(true),
     geodesic = Val(false),
+    M = 5,
+    α = 2
 ) where {sdim}
     @assert length(Ferrite.getfieldnames(dh_from)) == 1 "Multiple fields found in source dof handler. Please specify which field you want to transfer."
     return RadialBasisFunctionTransferOperator(
@@ -660,6 +725,8 @@ function RadialBasisFunctionTransferOperator(
         first(Ferrite.getfieldnames(dh_from));
         rescale = rescale,
         geodesic = geodesic,
+        M = M,
+        α = α
     )
 end
 
@@ -669,6 +736,8 @@ function RadialBasisFunctionTransferOperator(
     field_name::Symbol;
     rescale = Val(true),
     geodesic = Val(false),
+    M = 5,
+    α = 2
 ) where {sdim}
     return RadialBasisFunctionTransferOperator(
         dh_from,
@@ -677,7 +746,9 @@ function RadialBasisFunctionTransferOperator(
         field_name;
         rescale = rescale,
         geodesic = geodesic,
-    )
+        M = M,
+        α = α
+        )
 end
 
 """
@@ -688,11 +759,12 @@ function transfer!(
     operator::RadialBasisFunctionTransferOperator{Val{true}},
     u_from::AbstractArray,
 )
-    operator.source_linsolve_cache.b = u_from[operator.node_to_dof_map_from]
+    operator.source_linsolve_cache.b .= (@view u_from[operator.node_to_dof_map_from])
     sol = LinearSolve.solve!(operator.source_linsolve_cache)
     operator.interpolation_weights[1] .= sol.u
     operator.source_linsolve_cache.b = ones(length(operator.node_to_dof_map_from)) #TODO Cache this
     sol = LinearSolve.solve!(operator.source_linsolve_cache)
+    @warn sol.retcode
     operator.interpolation_weights[2] .= sol.u
     u_to[operator.node_to_dof_map_to] .=
         (operator.destination_influence_matrix * operator.interpolation_weights[1]) ./
