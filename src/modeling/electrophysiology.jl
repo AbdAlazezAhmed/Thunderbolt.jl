@@ -140,6 +140,14 @@ A dummy protocol describing the absence of stimuli for a simulation.
 struct NoStimulationProtocol <: TransmembraneStimulationProtocol end
 
 """
+Activation protocol for uniformally activating the endocardium with zero wave arrival time.
+"""
+struct UniformEndocardialActivationProtocol{CST} <: TransmembraneStimulationProtocol
+    subdomains_offsets::Dict{String, Float64}
+    cs::CST
+end
+
+"""
 Describe the transmembrane stimulation by some analytical function on a given set of time intervals.
 """
 struct AnalyticalTransmembraneStimulationProtocol{
@@ -254,10 +262,9 @@ end
 ReactionDiffusionSplit(model) = ReactionDiffusionSplit(model, nothing)
 
 """
-    ReactionEikonalSplit(model)
-    ReactionEikonalSplit(model, coeff)
+    ReactionEikonalSplit(model, cs)
 Annotation for the reaction-Eikonal split of a given model. The
-second argument is a coefficient describing the input `x` for the reaction model rhs,
+argument `cs` is a coefficient describing the input `x` for the reaction model rhs,
 which is usually some generalized coordinate.
 """
 struct ReactionEikonalSplit{mType, csType}
@@ -265,37 +272,46 @@ struct ReactionEikonalSplit{mType, csType}
     cs::csType
 end
 
-ReactionEikonalSplit(model) = ReactionEikonalSplit(model, nothing)
+"""
+    ReactionEikonalDiffusionSplit(model, cs)
+Annotation for the reaction-Eikonal-diffusion split of a given model. The
+argument `cs` is a coefficient describing the input `x` for the reaction model rhs,
+which is usually some generalized coordinate.
+"""
+struct ReactionEikonalDiffusionSplit{mType, csType}
+    model::mType
+    cs::csType
+end
 
 """
+    StimulatedCellModel(;cell_model, [stim_offset=0.0, stim_length=1.0, stim_strength= 0.91])
+
 Wrapper around ionic cell models that adds foot current according to [NeicCamposPrassl:2017:ECE](@citet)
 """
-@kwdef struct StimulatedCellModel{TC,OffestT,T}<:AbstractIonicModel
+@kwdef struct StimulatedCellModel{TC, OffestT, T} <: AbstractIonicModel
     cell_model::TC
     stim_offset::OffestT = 0.0
     stim_length::T = 1.0
     stim_strength::T = 0.91
-    # x::TV
+    τᶠ::T = 0.25
 end
 num_states(m::StimulatedCellModel) = num_states(m.cell_model)
 default_initial_state(m::StimulatedCellModel) = default_initial_state(m.cell_model)
-function cell_rhs!(du, u, i, t, m::StimulatedCellModel)
-    # @assert i isa Integer
-    cell_rhs!(du,u,nothing,t,m.cell_model)
-    if i isa AbstractVector
-        if m.stim_offset[i] ≤ t ≤ m.stim_offset[i] + m.stim_length
-            τᶠ = 0.25
-            idx = transmembranepotential_index(m.cell_model)
-            du[idx] += m.stim_strength/τᶠ * exp((t-m.stim_offset[i])/τᶠ)
-        end
-    else
-        if m.stim_offset ≤ t ≤ m.stim_offset + m.stim_length
-            τᶠ = 0.25
-            idx = transmembranepotential_index(m.cell_model)
-            du[idx] += m.stim_strength/τᶠ * exp((t-m.stim_offset)/τᶠ)
-        end
+function cell_rhs!(du, u, i, x, t, m::StimulatedCellModel)
+    cell_rhs!(du, u, i, nothing, t, m.cell_model)
+    if m.stim_offset ≤ t ≤ m.stim_offset + m.stim_length
+        idx = transmembranepotential_index(m.cell_model)
+        du[idx] += m.stim_strength / m.τᶠ * exp((t - m.stim_offset) / m.τᶠ)
     end
+    return nothing
+end
 
+function cell_rhs!(du, u, i, x, t, m::StimulatedCellModel{<:Any, <:AbstractArray})
+    cell_rhs!(du, u, i, nothing, t, m.cell_model)
+    if m.stim_offset[i] ≤ t ≤ m.stim_offset[i] + m.stim_length
+        idx = transmembranepotential_index(m.cell_model)
+        du[idx] += m.stim_strength / m.τᶠ * exp((t - m.stim_offset[i]) / m.τᶠ)
+    end
     return nothing
 end
 
