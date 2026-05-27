@@ -19,6 +19,15 @@ function Ψ(F, Fᵃ, coeff::AbstractOrthotropicMicrostructure, adapter::ActiveMa
     return Ψᵃ
 end
 
+function Ψ(F, Fᵃ, coeff::TransverselyIsotropicMicrostructure, adapter::ActiveMaterialAdapter)
+    f₀ = coeff.f
+    f̃ = Fᵃ ⋅ f₀ / norm(Fᵃ ⋅ f₀)
+
+    Fᵉ = F⋅inv(Fᵃ)
+    coeff = TransverselyIsotropicMicrostructure(f̃)
+    Ψᵃ = Ψ(Fᵉ, coeff, adapter.mat)
+    return Ψᵃ
+end
 @doc raw"""
 The active deformation gradient formulation by [GokMenKuh:2014:ghm](@citet).
 

@@ -108,7 +108,7 @@ function setup_coefficient_cache(
     qr::QuadratureRule,
     sdh::SubDofHandler,
 )
-    return AnisotropicPlanarMicrostructureCache(
+    return TransverselyIsotropicMicrostructureCache(
         setup_coefficient_cache(coefficient.fiber_coefficient, qr, sdh),
     )
 end
