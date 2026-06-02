@@ -72,6 +72,69 @@ get_strategy(f::AffineSteadyStateFunction) = f.assembly_strategy
 
 solution_size(f::AffineSteadyStateFunction) = ndofs(f.dh)
 
+"""
+    DynamicsInternalVariableWrapper(affine_ode_function, internal_variable_handler, model, dh, qrc)
+
+Wraps an AffineODEFunction to handle internal variables for materials like LinearMaxwellMaterial.
+
+## Status
+This wrapper provides infrastructure for dynamics with internal variables, but proper integration with 
+ODE solvers like NewmarkBeta requires either:
+
+1. A custom time stepper that performs local constraint solving at each step
+2. Augmentation of the ODE system with internal variable evolution equations
+3. A splitting method (e.g., operator splitting) where internal variables are solved locally
+
+## Usage Pattern (Future)
+For now, LinearMaxwellMaterial with dynamics should use the quasi-static solver with mass terms,
+or implement a custom time integrator that handles internal variable condensation.
+
+## Notes
+- Stores the AffineODEFunction internally
+- Tracks internal variable handler for proper initialization
+- Provides unified solution vector interface (displacement + internal variables)
+"""
+struct DynamicsInternalVariableWrapper{AF, LVH, M, DH, QRC} <: AbstractSemidiscreteFunction
+    affine_function::AF
+    lvh::LVH
+    model::M
+    dh::DH
+    qrc::QRC
+end
+
+get_strategy(f::DynamicsInternalVariableWrapper) = get_strategy(f.affine_function)
+solution_size(f::DynamicsInternalVariableWrapper) = ndofs(f.dh) + ndofs(f.lvh)
+internal_variable_offset(f::DynamicsInternalVariableWrapper, cid) = internal_variable_offset(f.lvh, cid)
+internal_variable_size(f::DynamicsInternalVariableWrapper, cid, qp) =
+    internal_variable_size(get_material_model(f, cid, qp), cid, qp)
+
+function default_initial_condition!(u::AbstractVector, f::DynamicsInternalVariableWrapper)
+    fill!(u, 0.0)
+    ndofs(f.lvh) == 0 && return  # no internal variable
+    uq = @view u[(ndofs(f.dh)+1):end]
+    for sdh in f.dh.subdofhandlers
+        qr = getquadraturerule(f.qrc, sdh)
+        for cell in CellIterator(sdh)
+            cid = cellid(cell)
+            offset = internal_variable_offset(f, cid)
+            offset == 0 && continue
+            for qp in QuadratureIterator(qr)
+                material_model = get_material_model(f, cid, qp)
+                ivsize_per_qp = internal_variable_size(material_model, cid, qp)
+                ivsize_per_qp == 0 && continue
+                q = @view uq[offset:(offset+ivsize_per_qp-1)]
+                default_initial_state!(q, material_model)
+                offset += ivsize_per_qp
+            end
+        end
+    end
+end
+
+__get_material_model(f::DynamicsInternalVariableWrapper, cid, qp) =
+    __get_material_model(f.model.material_model, cid, qp)
+get_material_model(f::DynamicsInternalVariableWrapper, cid, qp) =
+    __get_material_model(f, cid, qp)
+
 abstract type AbstractQuasiStaticFunction <: AbstractSemidiscreteFunction end
 
 """

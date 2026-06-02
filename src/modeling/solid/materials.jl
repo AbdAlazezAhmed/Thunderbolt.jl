@@ -744,6 +744,44 @@ end
 LinearMaxwellMaterial(E₀::T, Eₗ::T, μ::T, η₁::T, ν::T) where {T} =
     LinearMaxwellMaterial{T, 3}(E₀, Eₗ, μ, η₁, ν)
 
+
+# Simple small-strain linear elastic material (isotropic)
+Base.@kwdef struct LinearElasticMaterial{T, sdim} <: AbstractMaterialModel
+    E::T
+    ν::T
+end
+LinearElasticMaterial(E::T, ν::T) where {T} = LinearElasticMaterial{T, 3}(E, ν)
+
+function stress_function(material::LinearElasticMaterial, ε, coefficients, _state)
+    E = material.E
+    ν = material.ν
+    I = one(ε)
+    c₁ = ν / ((ν + 1)*(1-2ν)) * I ⊗ I
+    c₂ = 1 / (1+ν) * one(c₁)
+    ℂ = c₁ + c₂
+    return E * ℂ ⊡ ε
+end
+
+function stress_and_tangent(material::LinearElasticMaterial, F::Tensor{2}, coefficients, ::EmptyInternalModel)
+    ε = symmetric(F - one(F))
+    E = material.E
+    ν = material.ν
+    I = one(ε)
+    c₁ = ν / ((ν + 1)*(1-2ν)) * I ⊗ I
+    c₂ = 1 / (1+ν) * one(c₁)
+    ℂ = c₁ + c₂
+    σ = E * ℂ ⊡ ε
+    return σ, E * ℂ
+end
+
+function setup_coefficient_cache(m::LinearElasticMaterial, qr::QuadratureRule, sdh::SubDofHandler)
+    return NoMicrostructureModel()
+end
+
+function setup_internal_cache(material_model::LinearElasticMaterial, qr::QuadratureRule, sdh::SubDofHandler)
+    return EmptyInternalCache()
+end
+
 internal_variable_size(model::QuasiStaticModel, cid, qp) =
     internal_variable_size(model.material_model, cid, qp)
 function internal_variable_size(model::AbstractMaterialModel, cid, qp)
@@ -929,4 +967,8 @@ function gather_internal_variable_infos(model::LinearMaxwellMaterial{T, sdim}) w
     else
         return InternalVariableInfo(:εᵛ, 4)
     end
+end
+
+function default_initial_state!(Q::AbstractVector, material::LinearMaxwellMaterial)
+    fill!(Q, 0.0)  # Initialize viscous strain to zero
 end

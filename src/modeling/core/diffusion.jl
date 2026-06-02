@@ -61,6 +61,67 @@ function setup_element_cache(element_model::BilinearDiffusionIntegrator, sdh::Su
     )
 end
 
+# Simple bilinear integrator for linear isotropic elasticity (small-strain)
+struct BilinearElasticIntegrator{MaterialType, QRC <: QuadratureRuleCollection} <: AbstractBilinearIntegrator
+    material::MaterialType
+    qrc::QRC
+    sym::Symbol
+end
+
+struct BilinearElasticElementCache{MaterialType, CV} <: AbstractVolumetricElementCache
+    material::MaterialType
+    cellvalues::CV
+end
+
+function duplicate_for_device(device, cache::BilinearElasticElementCache)
+    return BilinearElasticElementCache(
+        duplicate_for_device(device, cache.material),
+        duplicate_for_device(device, cache.cellvalues),
+    )
+end
+
+function assemble_element!(
+    Kₑ::AbstractMatrix,
+    cell,
+    element_cache::BilinearElasticElementCache,
+    time,
+)
+    @unpack cellvalues, material = element_cache
+    reinit!(cellvalues, cell)
+    n_basefuncs = getnbasefunctions(cellvalues)
+
+    for qp in QuadratureIterator(cellvalues)
+        dΩ = getdetJdV(cellvalues, qp)
+
+        # isotropic elastic stiffness
+        E = material.E
+        ν = material.ν
+        I = one(shape_gradient(cellvalues, qp, 1))
+        c₁ = ν / ((ν + 1)*(1-2ν)) * I ⊗ I
+        c₂ = 1 / (1+ν) * one(c₁)
+        ℂ = E * (c₁ + c₂)
+
+        for i = 1:n_basefuncs
+            ∇Nᵢ = shape_gradient(cellvalues, qp, i)
+            εᵢ = symmetric(∇Nᵢ)
+            for j = 1:n_basefuncs
+                ∇Nⱼ = shape_gradient(cellvalues, qp, j)
+                εⱼ = symmetric(∇Nⱼ)
+                Kₑ[i, j] += _inner_product_helper(εⱼ, ℂ, εᵢ) * dΩ
+            end
+        end
+    end
+end
+
+function setup_element_cache(element_model::BilinearElasticIntegrator, sdh::SubDofHandler)
+    @assert length(sdh.dh.field_names) == 1 "Support for multiple fields not yet implemented."
+    qr         = getquadraturerule(element_model.qrc, sdh)
+    field_name = first(sdh.dh.field_names)
+    ip         = Ferrite.getfieldinterpolation(sdh, field_name)
+    ip_geo     = geometric_subdomain_interpolation(sdh)
+    BilinearElasticElementCache(element_model.material, CellValues(qr, ip, ip_geo))
+end
+
 @doc raw"""
     TransientDiffusionModel(conductivity_coefficient, source_term, solution_variable_symbol)
 

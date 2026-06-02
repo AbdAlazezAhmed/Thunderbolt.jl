@@ -1,5 +1,5 @@
 abstract type AbstractTransferOperator end
-
+using Pardiso
 function get_subdofhandler_indices_on_subdomains(dh::DofHandler, subdomain_names::Vector{String})
     grid = get_grid(dh)
     sdh_ids = Set{Int}()
@@ -435,7 +435,7 @@ function _RadialBasisFunctionTransferOperator(
         distances_source,
         parallel = :threads,
     ).dists
-    M = 15
+    M = 2
     α = 2
     support_radii = maximum.(last(knn(source_kdtree, nodes_from, M)))
     h_max = maximum(distances_source)
@@ -463,7 +463,7 @@ function _RadialBasisFunctionTransferOperator(
     destination_influence_matrix =
         construct_RBF_dist_kdtree(nodes_from, support_radii, nodes_to, rbf_value, distance_func, α)
     prob = LinearSolve.LinearProblem(source_influence_matrix, copy(γf))
-    linsolve = LinearSolve.init(prob)
+    linsolve = LinearSolve.init(prob,   LinearSolve.PardisoJL())
 
     RadialBasisFunctionTransferOperator{
         typeof(rescale),
@@ -596,7 +596,7 @@ function _RadialBasisFunctionTransferOperator(
     γf = zeros(length(node_to_dof_map_from))
     γg = zeros(length(node_to_dof_map_from))
     source_kdtree = KDTree(nodes_from)
-    M = 15
+    M = 2
     α = 2
     support_radii = maximum.(last(knn(source_kdtree, nodes_from, M)))
     distance_func = (x, xi, y, yi) -> norm(x[xi] - y[yi])
@@ -611,7 +611,7 @@ function _RadialBasisFunctionTransferOperator(
     destination_influence_matrix =
         construct_RBF_dist_kdtree(nodes_from, support_radii, nodes_to, rbf_value, distance_func, α)
     prob = LinearSolve.LinearProblem(source_influence_matrix, copy(γf))
-    linsolve = LinearSolve.init(prob)
+    linsolve = LinearSolve.init(prob,  LinearSolve.PardisoJL())
 
     RadialBasisFunctionTransferOperator{
         typeof(rescale),

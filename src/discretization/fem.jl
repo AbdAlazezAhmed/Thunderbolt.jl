@@ -402,6 +402,41 @@ function semidiscretize(
     return semidiscrete_problem
 end
 
+function semidiscretize(
+    model::ElastodynamicsModel,
+    discretization::FiniteElementDiscretization,
+    mesh::AbstractGrid,
+)
+    sym = model.displacement_symbol
+    ipc = _get_interpolation_from_discretization(discretization, sym)
+    qrc = _get_quadrature_from_discretization(discretization, sym)
+    dh = DofHandler(mesh)
+    lvh = InternalVariableHandler(mesh)
+    semidiscretize_register_subdomains!(dh, lvh, model, discretization, discretization.subdomains)
+    close!(dh)
+    close!(lvh)
+
+    ch = ConstraintHandler(dh)
+    for dbc ∈ discretization.dbcs
+        Ferrite.add!(ch, dbc)
+    end
+    close!(ch)
+
+    mass_term = BilinearMassIntegrator(model.ρ, qrc, sym)
+    elastic_term = BilinearElasticIntegrator(model.material_model, qrc, sym)
+    source_term = LinearIntegrator(ZeroSource(), qrc)
+
+    aff = AffineODEFunction(mass_term, elastic_term, source_term, dh, discretization.assembly_strategy)
+    
+    # For materials without internal variables, return directly
+    if ndofs(lvh) == 0
+        return aff
+    end
+    
+    # For materials with internal variables (e.g., LinearMaxwellMaterial), wrap for condensation
+    return DynamicsInternalVariableWrapper(aff, lvh, model, dh, qrc)
+end
+
 function Thunderbolt.semidiscretize(coupled_model::ElectroMechanicalCoupledModel, discretizations::Tuple, meshes::Tuple{<:Thunderbolt.AbstractGrid, <:Thunderbolt.AbstractGrid})
     ep_sdp = semidiscretize(coupled_model.ep_model, discretizations[1], meshes[1])
     mech_sdp = semidiscretize(coupled_model.structural_model, discretizations[2], meshes[2])
