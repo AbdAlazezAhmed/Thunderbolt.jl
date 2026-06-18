@@ -4,12 +4,12 @@
 
 A coefficient given as the analytical function f(x,t) in the specified coordiante system.
 """
-struct AnalyticalCoefficient{F <: Function, CSYS <: CoordinateSystemCoefficient}
+struct AnalyticalCoefficient{F, CSYS <: CoordinateSystemCoefficient}
     f::F
     coordinate_system_coefficient::CSYS
 end
 
-struct AnalyticalCoefficientCache{F <: Function, CSC}
+struct AnalyticalCoefficientCache{F, CSC}
     f::F
     coordinate_system_cache::CSC
 end

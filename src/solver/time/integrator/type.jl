@@ -104,6 +104,7 @@ mutable struct ThunderboltTimeIntegrator{
     last_step_failed::Bool
     saveiter::Int
     saveiter_dense::Int
+    derivative_discontinuity::Bool
     just_hit_tstop::Bool
 end
 
@@ -294,9 +295,10 @@ function SciMLBase.__init(
         0,
         0,
         false,
+        false
     )
-    OrdinaryDiffEqCore.initialize_callbacks!(integrator)
-    DiffEqBase.initialize!(integrator, integrator.cache)
+    # OrdinaryDiffEqCore.initialize_callbacks!(integrator)
+    # DiffEqBase.initialize!(integrator, integrator.cache)
 
     if _tstops !== nothing
         tstops = _tstops(parameter_values(integrator), prob.tspan)

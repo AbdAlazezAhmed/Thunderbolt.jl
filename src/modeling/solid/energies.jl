@@ -90,12 +90,12 @@ end
 """
 https://onlinelibrary.wiley.com/doi/epdf/10.1002/cnm.2866
 """
-Base.@kwdef struct TransverseIsotopicNeoHookeanModel{TD1, TD2, TU}
+Base.@kwdef struct TransverseIsotopicNeoHookeanModel{TD1, TD2, TD3, TU}
     a₁::TD1 = 2.6
     a₂::TD1 = 2.82
     α₁::TD2 = 30.48
     α₂::TD2 = 7.25
-
+    ϑ::TD3 = 0.0
     mpU::TU = HartmannNeffCompressionPenalty1()
 end
 function Ψ(
@@ -103,7 +103,7 @@ function Ψ(
     coeff::AbstractTransverselyIsotropicMicrostructure,
     mp::TransverseIsotopicNeoHookeanModel,
 )
-    @unpack a₁, a₂, α₁, α₂, mpU = mp
+    @unpack a₁, a₂, α₁, α₂, ϑ, mpU = mp
     f₀ = coeff.f
 
     C = tdot(F)
@@ -117,8 +117,8 @@ function Ψ(
     end
 
     I₄ = tr(C ⋅ f₀ ⊗ f₀)
-
-    Ψᵖ = α₁*(Ī₁ - 3)^a₁ + U(I₃, mpU)
+    Φreg = ϑ*(Ī₁ - 3.0)
+    Ψᵖ = α₁*((Ī₁ - 3)^a₁ + Φreg) + U(I₃, mpU)
     if I₄ ≥ 1
         Ψᵖ += α₂*(I₄ - 1)^a₂
     end

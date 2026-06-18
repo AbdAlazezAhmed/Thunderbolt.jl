@@ -263,12 +263,12 @@ function semidiscretize(
         let activation_timings = fill(Inf, length(eikonal_function.vertices)),
             cellmodel = epmodel.ion
 
-            (prob, i, repeat) -> begin
+            (prob, ctx) -> begin
                 model_i = Thunderbolt.StimulatedCellModel(;
                     cell_model = cellmodel,
-                    stim_offset = activation_timings[i],
+                    stim_offset = activation_timings[ctx.sim_id],
                 )
-                OrdinaryDiffEqCore.remake(prob, p = model_i, tstops = [activation_timings[i]])
+                OrdinaryDiffEqCore.remake(prob, p = model_i, tstops = [activation_timings[ctx.sim_id]])
             end
         end
 

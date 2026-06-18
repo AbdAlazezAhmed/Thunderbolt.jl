@@ -98,7 +98,7 @@ function nlsolve!(
         @timeit_debug "update operator" update_linearization!(op, residual, u, t)
         @timeit_debug "elimination" eliminate_constraints_from_linearization!(cache, f)
         linear_solver_cache.isfresh = true # Notify linear solver that we touched the system matrix
-
+        linear_solver_cache.precsisfresh = true
         residualnorm = residual_norm(cache, f)
         if residualnorm < cache.parameters.tol && cache.iter > 0
             push!(Θks, 0.0)
