@@ -4,6 +4,8 @@ import KernelAbstractions as KA
 
 using TimerOutputs: @timeit_debug
 
+import SciMLLogging: Standard
+
 import FerriteOperators:
     FerriteOperators,
     SequentialCPUDevice,
@@ -27,6 +29,7 @@ import FerriteOperators:
     EmptySurfaceElementCache,
     EmptyVolumetricElementCache,
     update_linearization!,
+    residual!,
     assemble_element!,
     internal_variable_offset,
     AbstractBilinearIntegrator,
@@ -95,12 +98,16 @@ import Logging: Logging, LogLevel, @info, @logmsg
 
 import SymbolicIndexingInterface
 import SciMLBase
-@reexport import SciMLBase: init, solve, solve!, step!, TimeChoiceIterator
+@reexport import SciMLBase: init, solve, solve!, step!
+@reexport import SciMLIterators: TimeChoiceIterator
 using SciMLBase: recursivecopy!, recursivecopy
 import DiffEqBase#: AbstractDiffEqFunction, AbstractDEProblem
 import OrdinaryDiffEqCore#: OrdinaryDiffEqCore
+import OrdinaryDiffEqCore:
+    DummyController, DummyControllerCache, default_controller, setup_controller_cache
 import LinearSolve
 using LinearSolve: LinearAliasSpecifier
+import DynamicQuantities
 
 import ConcreteStructs: @concrete
 
@@ -154,9 +161,6 @@ include("solver/interface.jl")
 include("solver/linear.jl")
 include("solver/nonlinear.jl")
 include("solver/time_integration.jl")
-include("solver/linear/preconditioners/Preconditioners.jl")
-@reexport using .Preconditioners
-
 
 include("modeling/electrophysiology/ecg.jl")
 
@@ -200,6 +204,9 @@ export
     generate_quadratic_ring_mesh,
     generate_quadratic_open_ring_mesh,
     generate_ideal_lv_mesh,
+    # Mesh utilities
+    hexahedralize,
+    to_mesh,
     # Generic models
     TransientDiffusionModel,
     AffineODEFunction,
@@ -293,6 +300,12 @@ export
     FiniteElementDiscretization,
     # Solver
     SchurComplementLinearSolver,
+    KrylovMGSolver,
+    AbstractMGPrecon,
+    PMGPrecon,
+    GMGPrecon,
+    ChainedMGPrecon,
+    EisenstatWalkerForcing,
     NewtonRaphsonSolver,
     MultiLevelNewtonRaphsonSolver,
     HomotopyPathSolver,
