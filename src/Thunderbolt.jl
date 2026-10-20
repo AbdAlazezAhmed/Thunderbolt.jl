@@ -189,6 +189,7 @@ include("modeling/common.jl")
 include("modeling/microstructure.jl")
 
 include("modeling/electrophysiology.jl")
+include("modeling/electrophysiology/eikonal.jl")
 include("modeling/solid_mechanics.jl")
 include("modeling/fluid_mechanics.jl")
 
@@ -206,6 +207,7 @@ include("gpu/gpu_utils.jl")
 
 include("discretization/interface.jl")
 include("discretization/fem.jl")
+include("discretization/eikonal.jl")
 include("discretization/operator.jl")
 
 include("solver/logging.jl")
@@ -294,6 +296,17 @@ export
     # Local API
     PointwiseODEProblem,
     PointwiseODEFunction,
+    # Reaction-eikonal electrophysiology
+    EikonalModel,
+    UniformEndocardialActivationProtocol,
+    ReactionEikonalSplit,
+    ReactionEikonalDiffusionSplit,
+    StimulatedCellModel,
+    FastIterativeMethodDiscretization,
+    EikonalFunction,
+    ReactionEikonalODEFunction,
+    ReactionEikonalFunction,
+    ReactionEikonalDiffusionFunction,
     # Mechanics
     QuasiStaticModel,
     QuasiStaticProblem,
