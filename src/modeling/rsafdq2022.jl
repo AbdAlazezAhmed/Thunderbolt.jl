@@ -85,6 +85,8 @@ end
 # unknowns *are* the structural ones. Where a block split is needed -- `setup_stage_operator`
 # building the `BlockMatrix` Schur solves on -- it is derived there from the chamber count.
 solution_size(f::RSAFDQ20223DFunction) = solution_size(f.structural_function)
+# Its unknowns live on the structural `DofHandler` (see `VTKNewtonMonitor`).
+_monitor_dh(f::RSAFDQ20223DFunction) = f.structural_function.dh
 
 getch(f::AbstractSemidiscreteFunction) = f.ch
 getch(f::RSAFDQ20223DFunction) = getch(f.structural_function)

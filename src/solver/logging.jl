@@ -106,14 +106,18 @@ Base.@kwdef struct VTKNewtonMonitor
 end
 VTKNewtonMonitor(outdir::String) = VTKNewtonMonitor(outdir, DefaultProgressMonitor())
 
+# The `DofHandler` a monitored function's unknowns live on; a coupled function forwards to the one it wraps.
+_monitor_dh(f) = f.dh
+
 function nonlinear_step_monitor(cache, time, f, u, monitor::VTKNewtonMonitor)
     nonlinear_step_monitor(cache, time, f, u, monitor.inner_monitor)
 
     mkpath(monitor.outdir)
-    VTKGridFile(joinpath(monitor.outdir, "newton-monitor-t=$time-i=$(cache.iter).vtu"), f.dh) do vtk
-        write_solution(vtk, f.dh, u)
-        write_solution(vtk, f.dh, cache.linear_solver_cache.b, "_residual")
-        write_solution(vtk, f.dh, cache.linear_solver_cache.u, "_increment")
+    dh = _monitor_dh(f)
+    VTKGridFile(joinpath(monitor.outdir, "newton-monitor-t=$time-i=$(cache.iter).vtu"), dh) do vtk
+        write_solution(vtk, dh, u)
+        write_solution(vtk, dh, cache.linear_solver_cache.b, "_residual")
+        write_solution(vtk, dh, cache.linear_solver_cache.u, "_increment")
     end
 end
 
