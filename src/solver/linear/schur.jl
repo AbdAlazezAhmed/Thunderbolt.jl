@@ -125,6 +125,8 @@ function LinearSolve.solve!(
 
     # Sync inner solver with outer solver
     innersolve.isfresh = cache.isfresh
+    # LinearSolve rebuilds the preconditioner only when `precsisfresh` is set.
+    innersolve.precsisfresh = cache.precsisfresh
 
     # First step is solving A₁₁ z₁ = b₁
     @. innersolve.b = -b₁
@@ -187,6 +189,7 @@ function LinearSolve.solve!(
 
     # Sync outer cache
     cache.isfresh = innersolve.isfresh
+    cache.precsisfresh = innersolve.precsisfresh
     return LinearSolve.SciMLBase.build_linear_solution(
         alg,
         u,

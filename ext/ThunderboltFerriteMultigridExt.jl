@@ -113,6 +113,31 @@ function _lazy_precs(builder)
 end
 
 """
+The fine level of the hierarchy: `dh` itself, unless it carries dofs that belong to no cell field,
+e.g. the chamber pressures `RSAFDQ20223DFunction` appends after the displacement. The block the
+multigrid preconditions is then the field's alone, so the fine level is the field rebuilt on its
+own, which numbers the field's dofs as `dh` does (checked cell by cell).
+"""
+function _field_only_dh(dh::DofHandler, field_name::Symbol)
+    length(dh.field_names) == 1 || return dh
+    dh_field = DofHandler(Ferrite.get_grid(dh))
+    for sdh in dh.subdofhandlers
+        Ferrite.add!(SubDofHandler(dh_field, sdh.cellset), field_name, Ferrite.getfieldinterpolation(sdh, field_name))
+    end
+    Ferrite.close!(dh_field)
+    Ferrite.ndofs(dh_field) == Ferrite.ndofs(dh) && return dh
+    for (sdh, sdh_field) in zip(dh.subdofhandlers, dh_field.subdofhandlers)
+        range = Ferrite.dof_range(sdh, field_name)
+        for cell in Ferrite.CellIterator(sdh)
+            dofs = Ferrite.celldofs(cell)
+            Ferrite.celldofs(dh_field, Ferrite.cellid(cell))[1:length(range)] == dofs[range] ||
+                error("p-MG: the field $field_name of the DofHandler is not numbered as on its own; cannot build the hierarchy.")
+        end
+    end
+    return dh_field
+end
+
+"""
 Build a two-level `DofHandlerHierarchy` for polynomial multigrid on the same grid.
 
 The coarse `DofHandler` mirrors `f.dh` (one `SubDofHandler` per cell type) but uses
@@ -120,7 +145,7 @@ polynomial order `p-1` for every field interpolation.  Mixed meshes are handled
 transparently.
 """
 function _build_pmg_dhh(f, field_name::Symbol)
-    dh_fine = f.dh
+    dh_fine = _field_only_dh(f.dh, field_name)
     grid    = Ferrite.get_grid(dh_fine)
 
     dh_coarse = DofHandler(grid)
